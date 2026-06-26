@@ -1,0 +1,433 @@
+blueprint:
+  name: Philips Hue Dimmer Switch V2 - Toggle On and Custom Hue
+  description: >
+    Standalone light controller for the Philips Hue Dimmer Switch V2
+    (929002398602 / RWL022). The top On button toggles the selected lights by
+    default, brightness buttons step and continuously dim by default, and the
+    bottom Hue button is left for custom use. Supports ZHA and Zigbee2MQTT.
+  domain: automation
+  homeassistant:
+    min_version: 2024.10.0
+  input:
+    controller_device:
+      name: Philips Hue Dimmer Switch V2
+      description: Select the RWL022 / 929002398602 remote integrated through ZHA or Zigbee2MQTT.
+      selector:
+        device:
+          filter:
+            - integration: zha
+              manufacturer: Philips
+            - integration: mqtt
+              manufacturer: Philips
+              model: Hue dimmer switch
+            - integration: mqtt
+              manufacturer: Philips
+              model: Hue dimmer switch (929002398602)
+          multiple: false
+
+    target_lights:
+      name: Lights
+      description: Lights controlled by the default button actions.
+      selector:
+        target:
+          entity:
+            domain: light
+
+    brightness_step_pct:
+      name: Brightness step
+      description: Percent change used by each brightness step.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+          step: 1
+          unit_of_measurement: "%"
+          mode: slider
+
+    transition_seconds:
+      name: Transition
+      description: Transition time for default light actions.
+      default: 0.25
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 0.05
+          unit_of_measurement: seconds
+          mode: slider
+
+    hold_repeat_delay_ms:
+      name: Hold repeat delay
+      description: Delay between repeated brightness changes while a brightness button is held.
+      default: 350
+      selector:
+        number:
+          min: 100
+          max: 1500
+          step: 50
+          unit_of_measurement: ms
+          mode: slider
+
+    hold_max_repeats:
+      name: Hold safety limit
+      description: Maximum repeats if Home Assistant does not receive the button release event.
+      default: 200
+      selector:
+        number:
+          min: 1
+          max: 1000
+          step: 1
+          mode: slider
+
+    action_on_short:
+      name: On button short press
+      description: Optional override. Defaults to toggling the selected lights.
+      default: []
+      selector:
+        action:
+
+    action_on_long:
+      name: On button long press
+      description: Optional action. Defaults to doing nothing.
+      default: []
+      selector:
+        action:
+
+    action_up_short:
+      name: Brightness up short press
+      description: Optional override. Defaults to increasing brightness one step.
+      default: []
+      selector:
+        action:
+
+    action_up_long:
+      name: Brightness up long press
+      description: Optional override. Defaults to continuously increasing brightness until release.
+      default: []
+      selector:
+        action:
+
+    action_down_short:
+      name: Brightness down short press
+      description: Optional override. Defaults to decreasing brightness one step.
+      default: []
+      selector:
+        action:
+
+    action_down_long:
+      name: Brightness down long press
+      description: Optional override. Defaults to continuously decreasing brightness until release.
+      default: []
+      selector:
+        action:
+
+    action_hue_short:
+      name: Hue button short press
+      description: Optional custom action for the bottom Hue button. Defaults to doing nothing.
+      default: []
+      selector:
+        action:
+
+    action_hue_long:
+      name: Hue button long press
+      description: Optional custom action for holding the bottom Hue button. Defaults to doing nothing.
+      default: []
+      selector:
+        action:
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  brightness_step_pct: !input brightness_step_pct
+  transition_seconds: !input transition_seconds
+  hold_repeat_delay_ms: !input hold_repeat_delay_ms
+  hold_max_repeats: !input hold_max_repeats
+  action_on_short: !input action_on_short
+  action_on_long: !input action_on_long
+  action_up_short: !input action_up_short
+  action_up_long: !input action_up_long
+  action_down_short: !input action_down_short
+  action_down_long: !input action_down_long
+  action_hue_short: !input action_hue_short
+  action_hue_long: !input action_hue_long
+
+triggers:
+  # Zigbee2MQTT device actions.
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: on_press_release
+    id: on_short
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: on_hold
+    id: on_long
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: on_hold_release
+    id: stop_loop
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: up_press_release
+    id: up_short
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: up_hold
+    id: up_long
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: up_hold_release
+    id: stop_loop
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: down_press_release
+    id: down_short
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: down_hold
+    id: down_long
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: down_hold_release
+    id: stop_loop
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: off_press_release
+    id: hue_short
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: recall_0
+    id: hue_short
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: recall_1
+    id: hue_short
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: off_hold
+    id: hue_long
+  - trigger: device
+    domain: mqtt
+    device_id: !input controller_device
+    type: action
+    subtype: off_hold_release
+    id: stop_loop
+
+  # ZHA RWL022 events. Both *_short_release and *_press_release are included
+  # because command naming differs across ZHA quirk versions.
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: on_short_release
+    id: on_short
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: on_press_release
+    id: on_short
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: on_hold
+    id: on_long
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: on_long_release
+    id: stop_loop
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: up_short_release
+    id: up_short
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: up_press_release
+    id: up_short
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: up_hold
+    id: up_long
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: up_long_release
+    id: stop_loop
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: down_short_release
+    id: down_short
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: down_press_release
+    id: down_short
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: down_hold
+    id: down_long
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: down_long_release
+    id: stop_loop
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: off_short_release
+    id: hue_short
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: off_press_release
+    id: hue_short
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: off_hold
+    id: hue_long
+  - trigger: event
+    event_type: zha_event
+    event_data:
+      device_id: !input controller_device
+      command: off_long_release
+    id: stop_loop
+
+actions:
+  - choose:
+      - conditions: "{{ trigger.id == 'on_short' }}"
+        sequence:
+          - choose:
+              - conditions: "{{ action_on_short | count > 0 }}"
+                sequence: !input action_on_short
+            default:
+              - action: light.toggle
+                target: !input target_lights
+                data:
+                  transition: "{{ transition_seconds | float }}"
+
+      - conditions: "{{ trigger.id == 'on_long' }}"
+        sequence:
+          - choose:
+              - conditions: "{{ action_on_long | count > 0 }}"
+                sequence: !input action_on_long
+
+      - conditions: "{{ trigger.id == 'up_short' }}"
+        sequence:
+          - choose:
+              - conditions: "{{ action_up_short | count > 0 }}"
+                sequence: !input action_up_short
+            default:
+              - action: light.turn_on
+                target: !input target_lights
+                data:
+                  brightness_step_pct: "{{ brightness_step_pct | int }}"
+                  transition: "{{ transition_seconds | float }}"
+
+      - conditions: "{{ trigger.id == 'up_long' }}"
+        sequence:
+          - repeat:
+              while:
+                - condition: template
+                  value_template: "{{ repeat.index <= hold_max_repeats | int }}"
+              sequence:
+                - choose:
+                    - conditions: "{{ action_up_long | count > 0 }}"
+                      sequence: !input action_up_long
+                  default:
+                    - action: light.turn_on
+                      target: !input target_lights
+                      data:
+                        brightness_step_pct: "{{ brightness_step_pct | int }}"
+                        transition: "{{ transition_seconds | float }}"
+                - delay:
+                    milliseconds: "{{ hold_repeat_delay_ms | int }}"
+
+      - conditions: "{{ trigger.id == 'down_short' }}"
+        sequence:
+          - choose:
+              - conditions: "{{ action_down_short | count > 0 }}"
+                sequence: !input action_down_short
+            default:
+              - action: light.turn_on
+                target: !input target_lights
+                data:
+                  brightness_step_pct: "{{ (brightness_step_pct | int) * -1 }}"
+                  transition: "{{ transition_seconds | float }}"
+
+      - conditions: "{{ trigger.id == 'down_long' }}"
+        sequence:
+          - repeat:
+              while:
+                - condition: template
+                  value_template: "{{ repeat.index <= hold_max_repeats | int }}"
+              sequence:
+                - choose:
+                    - conditions: "{{ action_down_long | count > 0 }}"
+                      sequence: !input action_down_long
+                  default:
+                    - action: light.turn_on
+                      target: !input target_lights
+                      data:
+                        brightness_step_pct: "{{ (brightness_step_pct | int) * -1 }}"
+                        transition: "{{ transition_seconds | float }}"
+                - delay:
+                    milliseconds: "{{ hold_repeat_delay_ms | int }}"
+
+      - conditions: "{{ trigger.id == 'hue_short' }}"
+        sequence:
+          - choose:
+              - conditions: "{{ action_hue_short | count > 0 }}"
+                sequence: !input action_hue_short
+
+      - conditions: "{{ trigger.id == 'hue_long' }}"
+        sequence:
+          - choose:
+              - conditions: "{{ action_hue_long | count > 0 }}"
+                sequence: !input action_hue_long
