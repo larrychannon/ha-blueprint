@@ -21,3 +21,8 @@ Default behavior:
 - Brightness up/down hold continuously changes brightness until release.
 - Bottom `Hue` button defaults to no-op so it can be assigned to a custom purpose.
 - Hooks, virtual double press, and helper state tracking are intentionally omitted.
+
+The controller device selector is intentionally unfiltered. Home Assistant can
+store different manufacturer/model metadata for this remote depending on ZHA,
+Zigbee2MQTT, and quirk versions, so filtering can hide the remote from the
+dropdown.

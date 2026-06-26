@@ -11,18 +11,13 @@ blueprint:
   input:
     controller_device:
       name: Philips Hue Dimmer Switch V2
-      description: Select the RWL022 / 929002398602 remote integrated through ZHA or Zigbee2MQTT.
+      description: >
+        Select the RWL022 / 929002398602 remote integrated through ZHA or
+        Zigbee2MQTT. The selector is not filtered because Home Assistant device
+        metadata for this remote varies between ZHA, Zigbee2MQTT, and quirk
+        versions.
       selector:
         device:
-          filter:
-            - integration: zha
-              manufacturer: Philips
-            - integration: mqtt
-              manufacturer: Philips
-              model: Hue dimmer switch
-            - integration: mqtt
-              manufacturer: Philips
-              model: Hue dimmer switch (929002398602)
           multiple: false
 
     target_lights:
