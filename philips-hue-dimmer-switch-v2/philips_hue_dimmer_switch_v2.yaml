@@ -3,8 +3,9 @@ blueprint:
   description: >
     Standalone light controller for the Philips Hue Dimmer Switch V2
     (929002398602 / RWL022). The top On button toggles the selected lights by
-    default, brightness buttons step and continuously dim by default, and the
-    bottom Hue button is left for custom use. Supports ZHA and Zigbee2MQTT.
+    primary-light state by default, brightness buttons step and continuously
+    dim by default, and the bottom Hue button can optionally control secondary
+    lights. Supports ZHA and Zigbee2MQTT.
   domain: automation
   homeassistant:
     min_version: 2024.10.0
@@ -20,20 +21,43 @@ blueprint:
         device:
           multiple: false
 
-    target_lights:
-      name: Lights
-      description: Lights controlled by the default button actions.
+    primary_lights:
+      name: Primary lights
+      description: >
+        Lights controlled by the default button actions. Their state decides
+        whether the On button turns everything on or off.
       selector:
-        target:
-          entity:
-            domain: light
+        entity:
+          domain: light
+          multiple: true
+
+    secondary_lights:
+      name: Secondary lights
+      description: >
+        Optional extra lights controlled together with primary lights by the
+        On and brightness buttons. They can also be toggled separately by the
+        Hue button.
+      default: []
+      selector:
+        entity:
+          domain: light
+          multiple: true
 
     toggle_on_full_brightness:
       name: Toggle on at full brightness
       description: >
-        When enabled, the default On button action turns lights on at 100%
-        brightness instead of restoring their previous brightness. Turning
-        lights off still uses the normal toggle behavior.
+        When enabled, default toggle-on actions turn lights on at 100%
+        brightness instead of restoring their previous brightness.
+      default: false
+      selector:
+        boolean:
+
+    hue_button_toggles_secondary:
+      name: Hue button toggles secondary lights
+      description: >
+        When enabled, the default Hue button short press toggles only the
+        secondary lights. If any secondary light is on, all secondary lights
+        turn off. If all secondary lights are off, all secondary lights turn on.
       default: false
       selector:
         boolean:
@@ -145,7 +169,10 @@ mode: restart
 max_exceeded: silent
 
 variables:
+  primary_lights: !input primary_lights
+  secondary_lights: !input secondary_lights
   toggle_on_full_brightness: !input toggle_on_full_brightness
+  hue_button_toggles_secondary: !input hue_button_toggles_secondary
   brightness_step_pct: !input brightness_step_pct
   transition_seconds: !input transition_seconds
   hold_repeat_delay_ms: !input hold_repeat_delay_ms
@@ -352,20 +379,58 @@ actions:
           - choose:
               - conditions: "{{ action_on_short | count > 0 }}"
                 sequence: !input action_on_short
+              - conditions: >
+                  {{ expand(primary_lights)
+                    | selectattr('state', 'eq', 'on')
+                    | list
+                    | count > 0 }}
+                sequence:
+                  - action: light.turn_off
+                    target:
+                      entity_id: !input primary_lights
+                    data:
+                      transition: "{{ transition_seconds | float }}"
+                  - choose:
+                      - conditions: "{{ secondary_lights | count > 0 }}"
+                        sequence:
+                          - action: light.turn_off
+                            target:
+                              entity_id: !input secondary_lights
+                            data:
+                              transition: "{{ transition_seconds | float }}"
             default:
               - choose:
                   - conditions: "{{ toggle_on_full_brightness | bool }}"
                     sequence:
-                      - action: light.toggle
-                        target: !input target_lights
+                      - action: light.turn_on
+                        target:
+                          entity_id: !input primary_lights
                         data:
                           brightness_pct: 100
                           transition: "{{ transition_seconds | float }}"
+                      - choose:
+                          - conditions: "{{ secondary_lights | count > 0 }}"
+                            sequence:
+                              - action: light.turn_on
+                                target:
+                                  entity_id: !input secondary_lights
+                                data:
+                                  brightness_pct: 100
+                                  transition: "{{ transition_seconds | float }}"
                 default:
-                  - action: light.toggle
-                    target: !input target_lights
+                  - action: light.turn_on
+                    target:
+                      entity_id: !input primary_lights
                     data:
                       transition: "{{ transition_seconds | float }}"
+                  - choose:
+                      - conditions: "{{ secondary_lights | count > 0 }}"
+                        sequence:
+                          - action: light.turn_on
+                            target:
+                              entity_id: !input secondary_lights
+                            data:
+                              transition: "{{ transition_seconds | float }}"
 
       - conditions: "{{ trigger.id == 'on_long' }}"
         sequence:
@@ -380,10 +445,20 @@ actions:
                 sequence: !input action_up_short
             default:
               - action: light.turn_on
-                target: !input target_lights
+                target:
+                  entity_id: !input primary_lights
                 data:
                   brightness_step_pct: "{{ brightness_step_pct | int }}"
                   transition: "{{ transition_seconds | float }}"
+              - choose:
+                  - conditions: "{{ secondary_lights | count > 0 }}"
+                    sequence:
+                      - action: light.turn_on
+                        target:
+                          entity_id: !input secondary_lights
+                        data:
+                          brightness_step_pct: "{{ brightness_step_pct | int }}"
+                          transition: "{{ transition_seconds | float }}"
 
       - conditions: "{{ trigger.id == 'up_long' }}"
         sequence:
@@ -397,10 +472,20 @@ actions:
                       sequence: !input action_up_long
                   default:
                     - action: light.turn_on
-                      target: !input target_lights
+                      target:
+                        entity_id: !input primary_lights
                       data:
                         brightness_step_pct: "{{ brightness_step_pct | int }}"
                         transition: "{{ transition_seconds | float }}"
+                    - choose:
+                        - conditions: "{{ secondary_lights | count > 0 }}"
+                          sequence:
+                            - action: light.turn_on
+                              target:
+                                entity_id: !input secondary_lights
+                              data:
+                                brightness_step_pct: "{{ brightness_step_pct | int }}"
+                                transition: "{{ transition_seconds | float }}"
                 - delay:
                     milliseconds: "{{ hold_repeat_delay_ms | int }}"
 
@@ -411,10 +496,20 @@ actions:
                 sequence: !input action_down_short
             default:
               - action: light.turn_on
-                target: !input target_lights
+                target:
+                  entity_id: !input primary_lights
                 data:
                   brightness_step_pct: "{{ (brightness_step_pct | int) * -1 }}"
                   transition: "{{ transition_seconds | float }}"
+              - choose:
+                  - conditions: "{{ secondary_lights | count > 0 }}"
+                    sequence:
+                      - action: light.turn_on
+                        target:
+                          entity_id: !input secondary_lights
+                        data:
+                          brightness_step_pct: "{{ (brightness_step_pct | int) * -1 }}"
+                          transition: "{{ transition_seconds | float }}"
 
       - conditions: "{{ trigger.id == 'down_long' }}"
         sequence:
@@ -428,10 +523,20 @@ actions:
                       sequence: !input action_down_long
                   default:
                     - action: light.turn_on
-                      target: !input target_lights
+                      target:
+                        entity_id: !input primary_lights
                       data:
                         brightness_step_pct: "{{ (brightness_step_pct | int) * -1 }}"
                         transition: "{{ transition_seconds | float }}"
+                    - choose:
+                        - conditions: "{{ secondary_lights | count > 0 }}"
+                          sequence:
+                            - action: light.turn_on
+                              target:
+                                entity_id: !input secondary_lights
+                              data:
+                                brightness_step_pct: "{{ (brightness_step_pct | int) * -1 }}"
+                                transition: "{{ transition_seconds | float }}"
                 - delay:
                     milliseconds: "{{ hold_repeat_delay_ms | int }}"
 
@@ -440,6 +545,38 @@ actions:
           - choose:
               - conditions: "{{ action_hue_short | count > 0 }}"
                 sequence: !input action_hue_short
+              - conditions: >
+                  {{ hue_button_toggles_secondary | bool
+                    and secondary_lights | count > 0
+                    and expand(secondary_lights)
+                      | selectattr('state', 'eq', 'on')
+                      | list
+                      | count > 0 }}
+                sequence:
+                  - action: light.turn_off
+                    target:
+                      entity_id: !input secondary_lights
+                    data:
+                      transition: "{{ transition_seconds | float }}"
+              - conditions: >
+                  {{ hue_button_toggles_secondary | bool
+                    and secondary_lights | count > 0 }}
+                sequence:
+                  - choose:
+                      - conditions: "{{ toggle_on_full_brightness | bool }}"
+                        sequence:
+                          - action: light.turn_on
+                            target:
+                              entity_id: !input secondary_lights
+                            data:
+                              brightness_pct: 100
+                              transition: "{{ transition_seconds | float }}"
+                    default:
+                      - action: light.turn_on
+                        target:
+                          entity_id: !input secondary_lights
+                        data:
+                          transition: "{{ transition_seconds | float }}"
 
       - conditions: "{{ trigger.id == 'hue_long' }}"
         sequence:

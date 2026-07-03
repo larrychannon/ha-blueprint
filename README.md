@@ -16,12 +16,16 @@ https://raw.githubusercontent.com/larrychannon/ha-blueprint/main/philips-hue-dim
 
 Default behavior:
 
-- `On` short press toggles the selected lights.
+- `On` short press uses primary-light state as the source of truth:
+  - if any primary light is on, primary and secondary lights turn off;
+  - if all primary lights are off, primary and secondary lights turn on.
 - Optional setting makes lights turn on at 100% when toggled on, instead of
   restoring their previous brightness.
-- Brightness up/down short press steps brightness.
-- Brightness up/down hold continuously changes brightness until release.
-- Bottom `Hue` button defaults to no-op so it can be assigned to a custom purpose.
+- Brightness up/down short press steps primary and secondary brightness.
+- Brightness up/down hold continuously changes primary and secondary brightness
+  until release.
+- Bottom `Hue` button defaults to no-op, with an option to toggle secondary
+  lights only.
 - Hooks, virtual double press, and helper state tracking are intentionally omitted.
 
 The controller device selector is intentionally unfiltered. Home Assistant can
