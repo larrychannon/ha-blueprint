@@ -19,6 +19,8 @@ Default behavior:
 - `On` short press uses primary-light state as the source of truth:
   - if any primary light is on, primary and secondary lights turn off;
   - if all primary lights are off, primary and secondary lights turn on.
+- Optional setting lets secondary lights stop following normal primary On and
+  brightness controls.
 - Optional setting makes lights turn on at 100% when toggled on, instead of
   restoring their previous brightness.
 - Brightness up/down short press steps primary and secondary brightness.
@@ -26,6 +28,9 @@ Default behavior:
   until release.
 - Bottom `Hue` button defaults to no-op, with an option to toggle secondary
   lights only.
+- Another Hue option cycles through secondary lights. The selected light flashes
+  once, then On and brightness controls affect that selected secondary light
+  until the configurable selector timeout expires.
 - Hooks, virtual double press, and helper state tracking are intentionally omitted.
 
 The controller device selector is intentionally unfiltered. Home Assistant can
