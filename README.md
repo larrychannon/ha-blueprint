@@ -31,7 +31,7 @@ Default behavior:
 - Another Hue option cycles through secondary lights. The selected light flashes
   using a configurable light effect, default `blink`, then On and brightness
   controls affect that selected secondary light until the configurable selector
-  timeout expires.
+  timeout expires. Hue long press cancels the active secondary-light selector.
 - Hooks, virtual double press, and helper state tracking are intentionally omitted.
 
 The controller device selector is intentionally unfiltered. Home Assistant can

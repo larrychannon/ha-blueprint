@@ -779,6 +779,12 @@ actions:
                               type: action
                               subtype: recall_1
                               id: hue_short
+                            - trigger: device
+                              domain: mqtt
+                              device_id: !input controller_device
+                              type: action
+                              subtype: off_hold
+                              id: hue_long
                             - trigger: event
                               event_type: zha_event
                               event_data:
@@ -839,6 +845,12 @@ actions:
                                 device_id: !input controller_device
                                 command: off_press_release
                               id: hue_short
+                            - trigger: event
+                              event_type: zha_event
+                              event_data:
+                                device_id: !input controller_device
+                                command: off_hold
+                              id: hue_long
                           timeout:
                             seconds: "{{ hue_selector_timeout_seconds | int }}"
                           continue_on_timeout: true
@@ -846,6 +858,9 @@ actions:
                             - conditions: "{{ not wait.completed }}"
                               sequence:
                                 - stop: Hue selector timed out
+                            - conditions: "{{ wait.trigger.id == 'hue_long' }}"
+                              sequence:
+                                - stop: Hue selector cancelled
                             - conditions: "{{ wait.trigger.id == 'hue_short' }}"
                               sequence:
                                 - variables:
