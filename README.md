@@ -16,8 +16,25 @@ https://raw.githubusercontent.com/larrychannon/ha-blueprint/main/philips-hue-dim
 
 Default behavior:
 
-- `On` short press toggles the selected lights.
-- Brightness up/down short press steps brightness.
-- Brightness up/down hold continuously changes brightness until release.
-- Bottom `Hue` button defaults to no-op so it can be assigned to a custom purpose.
+- `On` short press uses primary-light state as the source of truth:
+  - if any primary light is on, primary and secondary lights turn off;
+  - if all primary lights are off, primary and secondary lights turn on.
+- Optional setting lets secondary lights stop following normal primary On and
+  brightness controls.
+- Optional setting makes lights turn on at 100% when toggled on, instead of
+  restoring their previous brightness.
+- Brightness up/down short press steps primary and secondary brightness.
+- Brightness up/down hold continuously changes primary and secondary brightness
+  until release.
+- Bottom `Hue` button defaults to no-op, with an option to toggle secondary
+  lights only.
+- Another Hue option cycles through secondary lights. The selected light flashes
+  using a configurable light effect, default `blink`, then On and brightness
+  controls affect that selected secondary light until the configurable selector
+  timeout expires. Hue long press cancels the active secondary-light selector.
 - Hooks, virtual double press, and helper state tracking are intentionally omitted.
+
+The controller device selector is intentionally unfiltered. Home Assistant can
+store different manufacturer/model metadata for this remote depending on ZHA,
+Zigbee2MQTT, and quirk versions, so filtering can hide the remote from the
+dropdown.

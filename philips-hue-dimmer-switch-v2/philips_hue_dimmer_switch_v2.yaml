@@ -3,35 +3,105 @@ blueprint:
   description: >
     Standalone light controller for the Philips Hue Dimmer Switch V2
     (929002398602 / RWL022). The top On button toggles the selected lights by
-    default, brightness buttons step and continuously dim by default, and the
-    bottom Hue button is left for custom use. Supports ZHA and Zigbee2MQTT.
+    primary-light state by default, brightness buttons step and continuously
+    dim by default, and the bottom Hue button can optionally control secondary
+    lights. Supports ZHA and Zigbee2MQTT.
   domain: automation
   homeassistant:
     min_version: 2024.10.0
   input:
     controller_device:
       name: Philips Hue Dimmer Switch V2
-      description: Select the RWL022 / 929002398602 remote integrated through ZHA or Zigbee2MQTT.
+      description: >
+        Select the RWL022 / 929002398602 remote integrated through ZHA or
+        Zigbee2MQTT. The selector is not filtered because Home Assistant device
+        metadata for this remote varies between ZHA, Zigbee2MQTT, and quirk
+        versions.
       selector:
         device:
-          filter:
-            - integration: zha
-              manufacturer: Philips
-            - integration: mqtt
-              manufacturer: Philips
-              model: Hue dimmer switch
-            - integration: mqtt
-              manufacturer: Philips
-              model: Hue dimmer switch (929002398602)
           multiple: false
 
-    target_lights:
-      name: Lights
-      description: Lights controlled by the default button actions.
+    primary_lights:
+      name: Primary lights
+      description: >
+        Lights controlled by the default button actions. Their state decides
+        whether the On button turns everything on or off.
       selector:
-        target:
-          entity:
-            domain: light
+        entity:
+          domain: light
+          multiple: true
+
+    secondary_lights:
+      name: Secondary lights
+      description: >
+        Optional extra lights controlled together with primary lights by the
+        On and brightness buttons. They can also be toggled separately by the
+        Hue button.
+      default: []
+      selector:
+        entity:
+          domain: light
+          multiple: true
+
+    secondary_lights_follow_primary:
+      name: Secondary lights follow primary controls
+      description: >
+        When enabled, normal On and brightness controls affect both primary
+        and secondary lights. When disabled, normal On and brightness controls
+        affect only primary lights unless a secondary light is selected with
+        the Hue button.
+      default: true
+      selector:
+        boolean:
+
+    toggle_on_full_brightness:
+      name: Toggle on at full brightness
+      description: >
+        When enabled, default toggle-on actions turn lights on at 100%
+        brightness instead of restoring their previous brightness.
+      default: false
+      selector:
+        boolean:
+
+    hue_button_toggles_secondary:
+      name: Hue button toggles secondary lights
+      description: >
+        When enabled, the default Hue button short press toggles only the
+        secondary lights. If any secondary light is on, all secondary lights
+        turn off. If all secondary lights are off, all secondary lights turn on.
+      default: false
+      selector:
+        boolean:
+
+    hue_button_selects_secondary:
+      name: Hue button selects secondary light
+      description: >
+        When enabled, Hue button short press cycles through secondary lights.
+        The selected light flashes once, then On and brightness controls affect
+        that selected secondary light until the selector timeout expires. If
+        both Hue secondary options are enabled, selection mode takes priority.
+      default: false
+      selector:
+        boolean:
+
+    hue_selector_timeout_seconds:
+      name: Hue selector timeout
+      description: Seconds before controls return to normal primary behavior after selecting a secondary light.
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          unit_of_measurement: seconds
+          mode: slider
+
+    hue_selector_effect:
+      name: Hue selector effect
+      description: Light effect used to indicate the selected secondary light.
+      default: blink
+      selector:
+        text:
 
     brightness_step_pct:
       name: Brightness step
@@ -136,10 +206,18 @@ blueprint:
       selector:
         action:
 
-mode: restart
+mode: single
 max_exceeded: silent
 
 variables:
+  primary_lights: !input primary_lights
+  secondary_lights: !input secondary_lights
+  secondary_lights_follow_primary: !input secondary_lights_follow_primary
+  toggle_on_full_brightness: !input toggle_on_full_brightness
+  hue_button_toggles_secondary: !input hue_button_toggles_secondary
+  hue_button_selects_secondary: !input hue_button_selects_secondary
+  hue_selector_timeout_seconds: !input hue_selector_timeout_seconds
+  hue_selector_effect: !input hue_selector_effect
   brightness_step_pct: !input brightness_step_pct
   transition_seconds: !input transition_seconds
   hold_repeat_delay_ms: !input hold_repeat_delay_ms
@@ -346,11 +424,64 @@ actions:
           - choose:
               - conditions: "{{ action_on_short | count > 0 }}"
                 sequence: !input action_on_short
+              - conditions: >
+                  {{ expand(primary_lights)
+                    | selectattr('state', 'eq', 'on')
+                    | list
+                    | count > 0 }}
+                sequence:
+                  - action: light.turn_off
+                    target:
+                      entity_id: !input primary_lights
+                    data:
+                      transition: "{{ transition_seconds | float }}"
+                  - choose:
+                      - conditions: >
+                          {{ secondary_lights_follow_primary | bool
+                            and secondary_lights | count > 0 }}
+                        sequence:
+                          - action: light.turn_off
+                            target:
+                              entity_id: !input secondary_lights
+                            data:
+                              transition: "{{ transition_seconds | float }}"
             default:
-              - action: light.toggle
-                target: !input target_lights
-                data:
-                  transition: "{{ transition_seconds | float }}"
+              - choose:
+                  - conditions: "{{ toggle_on_full_brightness | bool }}"
+                    sequence:
+                      - action: light.turn_on
+                        target:
+                          entity_id: !input primary_lights
+                        data:
+                          brightness_pct: 100
+                          transition: "{{ transition_seconds | float }}"
+                      - choose:
+                          - conditions: >
+                              {{ secondary_lights_follow_primary | bool
+                                and secondary_lights | count > 0 }}
+                            sequence:
+                              - action: light.turn_on
+                                target:
+                                  entity_id: !input secondary_lights
+                                data:
+                                  brightness_pct: 100
+                                  transition: "{{ transition_seconds | float }}"
+                default:
+                  - action: light.turn_on
+                    target:
+                      entity_id: !input primary_lights
+                    data:
+                      transition: "{{ transition_seconds | float }}"
+                  - choose:
+                      - conditions: >
+                          {{ secondary_lights_follow_primary | bool
+                            and secondary_lights | count > 0 }}
+                        sequence:
+                          - action: light.turn_on
+                            target:
+                              entity_id: !input secondary_lights
+                            data:
+                              transition: "{{ transition_seconds | float }}"
 
       - conditions: "{{ trigger.id == 'on_long' }}"
         sequence:
@@ -365,29 +496,104 @@ actions:
                 sequence: !input action_up_short
             default:
               - action: light.turn_on
-                target: !input target_lights
+                target:
+                  entity_id: !input primary_lights
                 data:
                   brightness_step_pct: "{{ brightness_step_pct | int }}"
                   transition: "{{ transition_seconds | float }}"
+              - choose:
+                  - conditions: >
+                      {{ secondary_lights_follow_primary | bool
+                        and secondary_lights | count > 0 }}
+                    sequence:
+                      - action: light.turn_on
+                        target:
+                          entity_id: !input secondary_lights
+                        data:
+                          brightness_step_pct: "{{ brightness_step_pct | int }}"
+                          transition: "{{ transition_seconds | float }}"
 
       - conditions: "{{ trigger.id == 'up_long' }}"
         sequence:
+          - variables:
+              hold_released: false
           - repeat:
               while:
                 - condition: template
-                  value_template: "{{ repeat.index <= hold_max_repeats | int }}"
+                  value_template: >
+                    {{ (not (hold_released | bool))
+                      and repeat.index <= hold_max_repeats | int }}
               sequence:
                 - choose:
                     - conditions: "{{ action_up_long | count > 0 }}"
                       sequence: !input action_up_long
                   default:
                     - action: light.turn_on
-                      target: !input target_lights
+                      target:
+                        entity_id: !input primary_lights
                       data:
                         brightness_step_pct: "{{ brightness_step_pct | int }}"
                         transition: "{{ transition_seconds | float }}"
-                - delay:
+                    - choose:
+                        - conditions: >
+                            {{ secondary_lights_follow_primary | bool
+                              and secondary_lights | count > 0 }}
+                          sequence:
+                            - action: light.turn_on
+                              target:
+                                entity_id: !input secondary_lights
+                              data:
+                                brightness_step_pct: "{{ brightness_step_pct | int }}"
+                                transition: "{{ transition_seconds | float }}"
+                - wait_for_trigger:
+                    - trigger: device
+                      domain: mqtt
+                      device_id: !input controller_device
+                      type: action
+                      subtype: on_hold_release
+                    - trigger: device
+                      domain: mqtt
+                      device_id: !input controller_device
+                      type: action
+                      subtype: up_hold_release
+                    - trigger: device
+                      domain: mqtt
+                      device_id: !input controller_device
+                      type: action
+                      subtype: down_hold_release
+                    - trigger: device
+                      domain: mqtt
+                      device_id: !input controller_device
+                      type: action
+                      subtype: off_hold_release
+                    - trigger: event
+                      event_type: zha_event
+                      event_data:
+                        device_id: !input controller_device
+                        command: on_long_release
+                    - trigger: event
+                      event_type: zha_event
+                      event_data:
+                        device_id: !input controller_device
+                        command: up_long_release
+                    - trigger: event
+                      event_type: zha_event
+                      event_data:
+                        device_id: !input controller_device
+                        command: down_long_release
+                    - trigger: event
+                      event_type: zha_event
+                      event_data:
+                        device_id: !input controller_device
+                        command: off_long_release
+                  timeout:
                     milliseconds: "{{ hold_repeat_delay_ms | int }}"
+                  continue_on_timeout: true
+                - choose:
+                    - conditions: "{{ wait.completed }}"
+                      sequence:
+                        - variables:
+                            hold_released: true
 
       - conditions: "{{ trigger.id == 'down_short' }}"
         sequence:
@@ -396,35 +602,478 @@ actions:
                 sequence: !input action_down_short
             default:
               - action: light.turn_on
-                target: !input target_lights
+                target:
+                  entity_id: !input primary_lights
                 data:
                   brightness_step_pct: "{{ (brightness_step_pct | int) * -1 }}"
                   transition: "{{ transition_seconds | float }}"
+              - choose:
+                  - conditions: >
+                      {{ secondary_lights_follow_primary | bool
+                        and secondary_lights | count > 0 }}
+                    sequence:
+                      - action: light.turn_on
+                        target:
+                          entity_id: !input secondary_lights
+                        data:
+                          brightness_step_pct: "{{ (brightness_step_pct | int) * -1 }}"
+                          transition: "{{ transition_seconds | float }}"
 
       - conditions: "{{ trigger.id == 'down_long' }}"
         sequence:
+          - variables:
+              hold_released: false
           - repeat:
               while:
                 - condition: template
-                  value_template: "{{ repeat.index <= hold_max_repeats | int }}"
+                  value_template: >
+                    {{ (not (hold_released | bool))
+                      and repeat.index <= hold_max_repeats | int }}
               sequence:
                 - choose:
                     - conditions: "{{ action_down_long | count > 0 }}"
                       sequence: !input action_down_long
                   default:
                     - action: light.turn_on
-                      target: !input target_lights
+                      target:
+                        entity_id: !input primary_lights
                       data:
                         brightness_step_pct: "{{ (brightness_step_pct | int) * -1 }}"
                         transition: "{{ transition_seconds | float }}"
-                - delay:
+                    - choose:
+                        - conditions: >
+                            {{ secondary_lights_follow_primary | bool
+                              and secondary_lights | count > 0 }}
+                          sequence:
+                            - action: light.turn_on
+                              target:
+                                entity_id: !input secondary_lights
+                              data:
+                                brightness_step_pct: "{{ (brightness_step_pct | int) * -1 }}"
+                                transition: "{{ transition_seconds | float }}"
+                - wait_for_trigger:
+                    - trigger: device
+                      domain: mqtt
+                      device_id: !input controller_device
+                      type: action
+                      subtype: on_hold_release
+                    - trigger: device
+                      domain: mqtt
+                      device_id: !input controller_device
+                      type: action
+                      subtype: up_hold_release
+                    - trigger: device
+                      domain: mqtt
+                      device_id: !input controller_device
+                      type: action
+                      subtype: down_hold_release
+                    - trigger: device
+                      domain: mqtt
+                      device_id: !input controller_device
+                      type: action
+                      subtype: off_hold_release
+                    - trigger: event
+                      event_type: zha_event
+                      event_data:
+                        device_id: !input controller_device
+                        command: on_long_release
+                    - trigger: event
+                      event_type: zha_event
+                      event_data:
+                        device_id: !input controller_device
+                        command: up_long_release
+                    - trigger: event
+                      event_type: zha_event
+                      event_data:
+                        device_id: !input controller_device
+                        command: down_long_release
+                    - trigger: event
+                      event_type: zha_event
+                      event_data:
+                        device_id: !input controller_device
+                        command: off_long_release
+                  timeout:
                     milliseconds: "{{ hold_repeat_delay_ms | int }}"
+                  continue_on_timeout: true
+                - choose:
+                    - conditions: "{{ wait.completed }}"
+                      sequence:
+                        - variables:
+                            hold_released: true
 
       - conditions: "{{ trigger.id == 'hue_short' }}"
         sequence:
           - choose:
               - conditions: "{{ action_hue_short | count > 0 }}"
                 sequence: !input action_hue_short
+              - conditions: >
+                  {{ hue_button_selects_secondary | bool
+                    and secondary_lights | count > 0 }}
+                sequence:
+                  - variables:
+                      selected_secondary_index: 0
+                      blink_selected: true
+                  - repeat:
+                      while:
+                        - condition: template
+                          value_template: "{{ true }}"
+                      sequence:
+                        - variables:
+                            selected_secondary_light: "{{ secondary_lights[selected_secondary_index | int] }}"
+                        - choose:
+                            - conditions: "{{ blink_selected | bool }}"
+                              sequence:
+                                - action: light.turn_on
+                                  target:
+                                    entity_id: "{{ selected_secondary_light }}"
+                                  data:
+                                    effect: "{{ hue_selector_effect }}"
+                        - variables:
+                            blink_selected: false
+                        - wait_for_trigger:
+                            - trigger: device
+                              domain: mqtt
+                              device_id: !input controller_device
+                              type: action
+                              subtype: on_press_release
+                              id: on_short
+                            - trigger: device
+                              domain: mqtt
+                              device_id: !input controller_device
+                              type: action
+                              subtype: up_press_release
+                              id: up_short
+                            - trigger: device
+                              domain: mqtt
+                              device_id: !input controller_device
+                              type: action
+                              subtype: up_hold
+                              id: up_long
+                            - trigger: device
+                              domain: mqtt
+                              device_id: !input controller_device
+                              type: action
+                              subtype: down_press_release
+                              id: down_short
+                            - trigger: device
+                              domain: mqtt
+                              device_id: !input controller_device
+                              type: action
+                              subtype: down_hold
+                              id: down_long
+                            - trigger: device
+                              domain: mqtt
+                              device_id: !input controller_device
+                              type: action
+                              subtype: off_press_release
+                              id: hue_short
+                            - trigger: device
+                              domain: mqtt
+                              device_id: !input controller_device
+                              type: action
+                              subtype: recall_0
+                              id: hue_short
+                            - trigger: device
+                              domain: mqtt
+                              device_id: !input controller_device
+                              type: action
+                              subtype: recall_1
+                              id: hue_short
+                            - trigger: device
+                              domain: mqtt
+                              device_id: !input controller_device
+                              type: action
+                              subtype: off_hold
+                              id: hue_long
+                            - trigger: event
+                              event_type: zha_event
+                              event_data:
+                                device_id: !input controller_device
+                                command: on_short_release
+                              id: on_short
+                            - trigger: event
+                              event_type: zha_event
+                              event_data:
+                                device_id: !input controller_device
+                                command: on_press_release
+                              id: on_short
+                            - trigger: event
+                              event_type: zha_event
+                              event_data:
+                                device_id: !input controller_device
+                                command: up_short_release
+                              id: up_short
+                            - trigger: event
+                              event_type: zha_event
+                              event_data:
+                                device_id: !input controller_device
+                                command: up_press_release
+                              id: up_short
+                            - trigger: event
+                              event_type: zha_event
+                              event_data:
+                                device_id: !input controller_device
+                                command: up_hold
+                              id: up_long
+                            - trigger: event
+                              event_type: zha_event
+                              event_data:
+                                device_id: !input controller_device
+                                command: down_short_release
+                              id: down_short
+                            - trigger: event
+                              event_type: zha_event
+                              event_data:
+                                device_id: !input controller_device
+                                command: down_press_release
+                              id: down_short
+                            - trigger: event
+                              event_type: zha_event
+                              event_data:
+                                device_id: !input controller_device
+                                command: down_hold
+                              id: down_long
+                            - trigger: event
+                              event_type: zha_event
+                              event_data:
+                                device_id: !input controller_device
+                                command: off_short_release
+                              id: hue_short
+                            - trigger: event
+                              event_type: zha_event
+                              event_data:
+                                device_id: !input controller_device
+                                command: off_press_release
+                              id: hue_short
+                            - trigger: event
+                              event_type: zha_event
+                              event_data:
+                                device_id: !input controller_device
+                                command: off_hold
+                              id: hue_long
+                          timeout:
+                            seconds: "{{ hue_selector_timeout_seconds | int }}"
+                          continue_on_timeout: true
+                        - choose:
+                            - conditions: "{{ not wait.completed }}"
+                              sequence:
+                                - stop: Hue selector timed out
+                            - conditions: "{{ wait.trigger.id == 'hue_long' }}"
+                              sequence:
+                                - stop: Hue selector cancelled
+                            - conditions: "{{ wait.trigger.id == 'hue_short' }}"
+                              sequence:
+                                - variables:
+                                    selected_secondary_index: >
+                                      {{ ((selected_secondary_index | int) + 1)
+                                        % (secondary_lights | count) }}
+                                    blink_selected: true
+                            - conditions: "{{ wait.trigger.id == 'on_short' }}"
+                              sequence:
+                                - choose:
+                                    - conditions: "{{ is_state(selected_secondary_light, 'on') }}"
+                                      sequence:
+                                        - action: light.turn_off
+                                          target:
+                                            entity_id: "{{ selected_secondary_light }}"
+                                          data:
+                                            transition: "{{ transition_seconds | float }}"
+                                  default:
+                                    - choose:
+                                        - conditions: "{{ toggle_on_full_brightness | bool }}"
+                                          sequence:
+                                            - action: light.turn_on
+                                              target:
+                                                entity_id: "{{ selected_secondary_light }}"
+                                              data:
+                                                brightness_pct: 100
+                                                transition: "{{ transition_seconds | float }}"
+                                      default:
+                                        - action: light.turn_on
+                                          target:
+                                            entity_id: "{{ selected_secondary_light }}"
+                                          data:
+                                            transition: "{{ transition_seconds | float }}"
+                            - conditions: "{{ wait.trigger.id == 'up_short' }}"
+                              sequence:
+                                - action: light.turn_on
+                                  target:
+                                    entity_id: "{{ selected_secondary_light }}"
+                                  data:
+                                    brightness_step_pct: "{{ brightness_step_pct | int }}"
+                                    transition: "{{ transition_seconds | float }}"
+                            - conditions: "{{ wait.trigger.id == 'down_short' }}"
+                              sequence:
+                                - action: light.turn_on
+                                  target:
+                                    entity_id: "{{ selected_secondary_light }}"
+                                  data:
+                                    brightness_step_pct: "{{ (brightness_step_pct | int) * -1 }}"
+                                    transition: "{{ transition_seconds | float }}"
+                            - conditions: "{{ wait.trigger.id == 'up_long' }}"
+                              sequence:
+                                - variables:
+                                    hold_released: false
+                                - repeat:
+                                    while:
+                                      - condition: template
+                                        value_template: >
+                                          {{ (not (hold_released | bool))
+                                            and repeat.index <= hold_max_repeats | int }}
+                                    sequence:
+                                      - action: light.turn_on
+                                        target:
+                                          entity_id: "{{ selected_secondary_light }}"
+                                        data:
+                                          brightness_step_pct: "{{ brightness_step_pct | int }}"
+                                          transition: "{{ transition_seconds | float }}"
+                                      - wait_for_trigger:
+                                          - trigger: device
+                                            domain: mqtt
+                                            device_id: !input controller_device
+                                            type: action
+                                            subtype: on_hold_release
+                                          - trigger: device
+                                            domain: mqtt
+                                            device_id: !input controller_device
+                                            type: action
+                                            subtype: up_hold_release
+                                          - trigger: device
+                                            domain: mqtt
+                                            device_id: !input controller_device
+                                            type: action
+                                            subtype: down_hold_release
+                                          - trigger: device
+                                            domain: mqtt
+                                            device_id: !input controller_device
+                                            type: action
+                                            subtype: off_hold_release
+                                          - trigger: event
+                                            event_type: zha_event
+                                            event_data:
+                                              device_id: !input controller_device
+                                              command: on_long_release
+                                          - trigger: event
+                                            event_type: zha_event
+                                            event_data:
+                                              device_id: !input controller_device
+                                              command: up_long_release
+                                          - trigger: event
+                                            event_type: zha_event
+                                            event_data:
+                                              device_id: !input controller_device
+                                              command: down_long_release
+                                          - trigger: event
+                                            event_type: zha_event
+                                            event_data:
+                                              device_id: !input controller_device
+                                              command: off_long_release
+                                        timeout:
+                                          milliseconds: "{{ hold_repeat_delay_ms | int }}"
+                                        continue_on_timeout: true
+                                      - choose:
+                                          - conditions: "{{ wait.completed }}"
+                                            sequence:
+                                              - variables:
+                                                  hold_released: true
+                            - conditions: "{{ wait.trigger.id == 'down_long' }}"
+                              sequence:
+                                - variables:
+                                    hold_released: false
+                                - repeat:
+                                    while:
+                                      - condition: template
+                                        value_template: >
+                                          {{ (not (hold_released | bool))
+                                            and repeat.index <= hold_max_repeats | int }}
+                                    sequence:
+                                      - action: light.turn_on
+                                        target:
+                                          entity_id: "{{ selected_secondary_light }}"
+                                        data:
+                                          brightness_step_pct: "{{ (brightness_step_pct | int) * -1 }}"
+                                          transition: "{{ transition_seconds | float }}"
+                                      - wait_for_trigger:
+                                          - trigger: device
+                                            domain: mqtt
+                                            device_id: !input controller_device
+                                            type: action
+                                            subtype: on_hold_release
+                                          - trigger: device
+                                            domain: mqtt
+                                            device_id: !input controller_device
+                                            type: action
+                                            subtype: up_hold_release
+                                          - trigger: device
+                                            domain: mqtt
+                                            device_id: !input controller_device
+                                            type: action
+                                            subtype: down_hold_release
+                                          - trigger: device
+                                            domain: mqtt
+                                            device_id: !input controller_device
+                                            type: action
+                                            subtype: off_hold_release
+                                          - trigger: event
+                                            event_type: zha_event
+                                            event_data:
+                                              device_id: !input controller_device
+                                              command: on_long_release
+                                          - trigger: event
+                                            event_type: zha_event
+                                            event_data:
+                                              device_id: !input controller_device
+                                              command: up_long_release
+                                          - trigger: event
+                                            event_type: zha_event
+                                            event_data:
+                                              device_id: !input controller_device
+                                              command: down_long_release
+                                          - trigger: event
+                                            event_type: zha_event
+                                            event_data:
+                                              device_id: !input controller_device
+                                              command: off_long_release
+                                        timeout:
+                                          milliseconds: "{{ hold_repeat_delay_ms | int }}"
+                                        continue_on_timeout: true
+                                      - choose:
+                                          - conditions: "{{ wait.completed }}"
+                                            sequence:
+                                              - variables:
+                                                  hold_released: true
+              - conditions: >
+                  {{ hue_button_toggles_secondary | bool
+                    and secondary_lights | count > 0
+                    and expand(secondary_lights)
+                      | selectattr('state', 'eq', 'on')
+                      | list
+                      | count > 0 }}
+                sequence:
+                  - action: light.turn_off
+                    target:
+                      entity_id: !input secondary_lights
+                    data:
+                      transition: "{{ transition_seconds | float }}"
+              - conditions: >
+                  {{ hue_button_toggles_secondary | bool
+                    and secondary_lights | count > 0 }}
+                sequence:
+                  - choose:
+                      - conditions: "{{ toggle_on_full_brightness | bool }}"
+                        sequence:
+                          - action: light.turn_on
+                            target:
+                              entity_id: !input secondary_lights
+                            data:
+                              brightness_pct: 100
+                              transition: "{{ transition_seconds | float }}"
+                    default:
+                      - action: light.turn_on
+                        target:
+                          entity_id: !input secondary_lights
+                        data:
+                          transition: "{{ transition_seconds | float }}"
 
       - conditions: "{{ trigger.id == 'hue_long' }}"
         sequence:
