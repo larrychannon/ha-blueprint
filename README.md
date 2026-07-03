@@ -29,8 +29,9 @@ Default behavior:
 - Bottom `Hue` button defaults to no-op, with an option to toggle secondary
   lights only.
 - Another Hue option cycles through secondary lights. The selected light flashes
-  once, then On and brightness controls affect that selected secondary light
-  until the configurable selector timeout expires.
+  using a configurable light effect, default `blink`, then On and brightness
+  controls affect that selected secondary light until the configurable selector
+  timeout expires.
 - Hooks, virtual double press, and helper state tracking are intentionally omitted.
 
 The controller device selector is intentionally unfiltered. Home Assistant can

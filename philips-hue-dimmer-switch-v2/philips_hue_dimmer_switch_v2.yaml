@@ -96,6 +96,13 @@ blueprint:
           unit_of_measurement: seconds
           mode: slider
 
+    hue_selector_effect:
+      name: Hue selector effect
+      description: Light effect used to indicate the selected secondary light.
+      default: blink
+      selector:
+        text:
+
     brightness_step_pct:
       name: Brightness step
       description: Percent change used by each brightness step.
@@ -210,6 +217,7 @@ variables:
   hue_button_toggles_secondary: !input hue_button_toggles_secondary
   hue_button_selects_secondary: !input hue_button_selects_secondary
   hue_selector_timeout_seconds: !input hue_selector_timeout_seconds
+  hue_selector_effect: !input hue_selector_effect
   brightness_step_pct: !input brightness_step_pct
   transition_seconds: !input transition_seconds
   hold_repeat_delay_ms: !input hold_repeat_delay_ms
@@ -719,7 +727,7 @@ actions:
                                   target:
                                     entity_id: "{{ selected_secondary_light }}"
                                   data:
-                                    flash: short
+                                    effect: "{{ hue_selector_effect }}"
                         - variables:
                             blink_selected: false
                         - wait_for_trigger:
