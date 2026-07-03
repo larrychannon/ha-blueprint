@@ -28,6 +28,16 @@ blueprint:
           entity:
             domain: light
 
+    toggle_on_full_brightness:
+      name: Toggle on at full brightness
+      description: >
+        When enabled, the default On button action turns lights on at 100%
+        brightness instead of restoring their previous brightness. Turning
+        lights off still uses the normal toggle behavior.
+      default: false
+      selector:
+        boolean:
+
     brightness_step_pct:
       name: Brightness step
       description: Percent change used by each brightness step.
@@ -135,6 +145,7 @@ mode: restart
 max_exceeded: silent
 
 variables:
+  toggle_on_full_brightness: !input toggle_on_full_brightness
   brightness_step_pct: !input brightness_step_pct
   transition_seconds: !input transition_seconds
   hold_repeat_delay_ms: !input hold_repeat_delay_ms
@@ -342,10 +353,19 @@ actions:
               - conditions: "{{ action_on_short | count > 0 }}"
                 sequence: !input action_on_short
             default:
-              - action: light.toggle
-                target: !input target_lights
-                data:
-                  transition: "{{ transition_seconds | float }}"
+              - choose:
+                  - conditions: "{{ toggle_on_full_brightness | bool }}"
+                    sequence:
+                      - action: light.toggle
+                        target: !input target_lights
+                        data:
+                          brightness_pct: 100
+                          transition: "{{ transition_seconds | float }}"
+                default:
+                  - action: light.toggle
+                    target: !input target_lights
+                    data:
+                      transition: "{{ transition_seconds | float }}"
 
       - conditions: "{{ trigger.id == 'on_long' }}"
         sequence:

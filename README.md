@@ -17,6 +17,8 @@ https://raw.githubusercontent.com/larrychannon/ha-blueprint/main/philips-hue-dim
 Default behavior:
 
 - `On` short press toggles the selected lights.
+- Optional setting makes lights turn on at 100% when toggled on, instead of
+  restoring their previous brightness.
 - Brightness up/down short press steps brightness.
 - Brightness up/down hold continuously changes brightness until release.
 - Bottom `Hue` button defaults to no-op so it can be assigned to a custom purpose.
